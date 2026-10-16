@@ -18,7 +18,8 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   return (
     <nav
       aria-label="Navegación principal"
-      className="sticky bottom-0 left-0 w-full z-40 flex justify-around items-center h-16 px-4 bg-white/95 backdrop-blur-md border-t border-slate-200/80 shadow-[0_-4px_16px_rgba(15,23,42,0.06)]"
+      style={{ paddingBottom: 'max(0.35rem, env(safe-area-inset-bottom, 0px))' }}
+      className="sticky bottom-0 left-0 w-full z-40 flex justify-around items-center min-h-[4rem] px-4 bg-white/95 backdrop-blur-md border-t border-slate-200/80 shadow-[0_-4px_16px_rgba(15,23,42,0.06)]"
     >
       {/* Tab 1: Explorar */}
       <button

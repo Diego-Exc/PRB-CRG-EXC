@@ -141,6 +141,38 @@ export const MapScreen: React.FC<MapScreenProps> = ({
   const [isListView, setIsListView] = useState<boolean>(false);
   const [mapType, setMapType] = useState<'roadmap' | 'satellite' | 'hybrid'>('roadmap');
 
+  // Bottom Sheet Drawer States: 'collapsed' | 'half' | 'expanded'
+  const [sheetState, setSheetState] = useState<'collapsed' | 'half' | 'expanded'>('half');
+  const touchStartY = useRef<number | null>(null);
+
+  // Swipe / Drag gesture handling
+  const handleTouchStart = (e: React.TouchEvent | React.MouseEvent) => {
+    const y = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    touchStartY.current = y;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent | React.MouseEvent) => {
+    if (touchStartY.current === null) return;
+    const y = 'changedTouches' in e ? e.changedTouches[0].clientY : e.clientY;
+    const diff = y - touchStartY.current;
+    if (diff < -25) {
+      // Swiped UP -> expand drawer
+      setSheetState((curr) => (curr === 'collapsed' ? 'half' : 'expanded'));
+    } else if (diff > 25) {
+      // Swiped DOWN -> collapse drawer
+      setSheetState((curr) => (curr === 'expanded' ? 'half' : 'collapsed'));
+    }
+    touchStartY.current = null;
+  };
+
+  const toggleSheetState = () => {
+    setSheetState((curr) => {
+      if (curr === 'collapsed') return 'half';
+      if (curr === 'half') return 'expanded';
+      return 'collapsed';
+    });
+  };
+
   // Navigation simulation states
   const [isNavigating, setIsNavigating] = useState<boolean>(false);
   const [navStepText, setNavStepText] = useState<string>('');
@@ -179,10 +211,13 @@ export const MapScreen: React.FC<MapScreenProps> = ({
     setCameraTarget({ lat: USER_LOCATION.lat, lng: USER_LOCATION.lng });
   };
 
-  // Center on Selected Station
+  // Center on Selected Station & ensure bottom sheet is opened
   const handleFocusStation = (station: ChargingStation) => {
     onSelectStation(station);
     setCameraTarget({ lat: station.lat, lng: station.lng });
+    if (sheetState === 'collapsed') {
+      setSheetState('half');
+    }
   };
 
   // Toggle navigation simulation
@@ -461,8 +496,8 @@ export const MapScreen: React.FC<MapScreenProps> = ({
         </button>
       </div>
 
-      {/* 2. Real Google Maps Platform Interactive Map */}
-      <div className="w-full flex-1 relative min-h-[460px]">
+      {/* 2. Real Google Maps Platform Interactive Map (Full Bleed) */}
+      <div className="absolute inset-0 z-0">
         <Map
           mapId="DEMO_MAP_ID"
           internalUsageAttributionIds={['gmp_mcp_codeassist_v1_aistudio']}
@@ -518,13 +553,13 @@ export const MapScreen: React.FC<MapScreenProps> = ({
                 key={station.id}
                 position={{ lat: station.lat, lng: station.lng }}
                 zIndex={isSelected ? 1000 : 100}
-                onClick={() => onSelectStation(station)}
+                onClick={() => handleFocusStation(station)}
                 title={`${station.name} (${station.distanceKm} km)`}
               >
                 {isSelected ? (
                   /* Pin Selected (e.g. C.C. Oviedo, Santafé, Viva Envigado) */
                   <div
-                    onClick={() => onSelectStation(station)}
+                    onClick={() => handleFocusStation(station)}
                     className="flex flex-col items-center cursor-pointer transition-transform duration-200 transform hover:scale-105 -translate-x-1/2 -translate-y-full"
                   >
                     <div className="bg-white border-2 border-emerald-500 rounded-lg p-1.5 shadow-[0_8px_20px_rgba(0,108,73,0.25)] flex items-center space-x-1.5 whitespace-nowrap ring-4 ring-emerald-500/15">
@@ -549,7 +584,7 @@ export const MapScreen: React.FC<MapScreenProps> = ({
                 ) : isOccupied ? (
                   /* Occupied Pin (e.g. Unicentro) */
                   <div
-                    onClick={() => onSelectStation(station)}
+                    onClick={() => handleFocusStation(station)}
                     className="flex flex-col items-center cursor-pointer opacity-90 transition-transform duration-200 hover:scale-105 -translate-x-1/2 -translate-y-full"
                   >
                     <div className="bg-white border border-slate-300 rounded-lg px-2 py-1 shadow-sm flex items-center space-x-1.5 whitespace-nowrap">
@@ -563,7 +598,7 @@ export const MapScreen: React.FC<MapScreenProps> = ({
                 ) : (
                   /* Available Pin */
                   <div
-                    onClick={() => onSelectStation(station)}
+                    onClick={() => handleFocusStation(station)}
                     className="flex flex-col items-center cursor-pointer transition-transform duration-200 hover:scale-105 -translate-x-1/2 -translate-y-full"
                   >
                     <div className="bg-white border border-slate-200 rounded-lg px-2 py-1 shadow-md flex items-center space-x-1.5 whitespace-nowrap">
@@ -668,172 +703,388 @@ export const MapScreen: React.FC<MapScreenProps> = ({
         )}
       </div>
 
-      {/* 3. Interactive Bottom Sheet (Station Preview Drawer - Level 3 Elevation) */}
-      <div className="relative z-30 bg-white rounded-t-[24px] border-t border-slate-200/80 shadow-[0_-12px_32px_rgba(15,23,42,0.14)] px-4 pt-2.5 pb-3 transition-all duration-300">
-        {/* Drag Handle Bar */}
-        <div className="w-9 h-1 bg-slate-300 rounded-full mx-auto mb-2.5"></div>
+      {/* Backdrop overlay when bottom sheet is fully expanded */}
+      {sheetState === 'expanded' && (
+        <div
+          onClick={() => setSheetState('half')}
+          className="absolute inset-0 z-25 bg-slate-900/35 backdrop-blur-[1px] transition-opacity duration-300 animate-in fade-in"
+        />
+      )}
 
-        {/* Station Header & Verified Badge */}
-        <div className="flex items-start justify-between">
-          <div>
-            <div className="flex items-center space-x-1.5">
-              <h1 className="font-bold text-base sm:text-lg text-slate-900 tracking-tight">
-                {selectedStation.name}
-              </h1>
-              {selectedStation.verified && (
-                <span
-                  className="material-symbols-outlined material-symbols-fill text-emerald-600 text-base"
-                  title="Verificado ExceCharge"
-                >
-                  verified
+      {/* 3. Fully Interactive & Draggable Bottom Sheet Drawer */}
+      <div
+        className={`absolute bottom-0 left-0 right-0 z-30 bg-white rounded-t-[28px] border-t border-slate-200/90 shadow-[0_-12px_36px_rgba(15,23,42,0.18)] flex flex-col transition-all duration-300 ease-out select-none ${
+          sheetState === 'collapsed'
+            ? 'h-[120px]'
+            : sheetState === 'half'
+            ? 'h-[365px] max-h-[58%]'
+            : 'h-[86%] max-h-[86%]'
+        }`}
+      >
+        {/* Interactive Header & Drag Handle (Draggable & Clickable) */}
+        <div
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+          onMouseDown={handleTouchStart}
+          onMouseUp={handleTouchEnd}
+          onClick={toggleSheetState}
+          className="w-full pt-2.5 pb-2 px-4 cursor-grab active:cursor-grabbing hover:bg-slate-50/60 rounded-t-[28px] transition-colors shrink-0"
+        >
+          {/* Centered Drag Handle Pill */}
+          <div className="flex items-center justify-center mb-1.5">
+            <div className="w-11 h-1.5 bg-slate-300 hover:bg-slate-400 rounded-full transition-colors"></div>
+          </div>
+
+          {/* Station Header & Verified Badge & Chevron Toggle */}
+          <div className="flex items-start justify-between">
+            <div className="min-w-0 pr-2 flex-1">
+              <div className="flex items-center space-x-1.5">
+                <h1 className="font-bold text-base sm:text-lg text-slate-900 tracking-tight truncate">
+                  {selectedStation.name}
+                </h1>
+                {selectedStation.verified && (
+                  <span
+                    className="material-symbols-outlined material-symbols-fill text-emerald-600 text-base shrink-0"
+                    title="Verificado ExceCharge"
+                  >
+                    verified
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center space-x-2 mt-0.5">
+                {selectedStation.isOpen24h && (
+                  <span className="text-[10px] bg-emerald-100 text-emerald-900 font-semibold px-2 py-0.5 rounded-full shrink-0">
+                    Abierto 24h
+                  </span>
+                )}
+                <span className="text-xs text-slate-500 flex items-center font-medium truncate">
+                  <span className="material-symbols-outlined text-xs mr-0.5 text-emerald-600 shrink-0">
+                    near_me
+                  </span>
+                  <strong className="text-slate-800 font-mono mr-1">{selectedStation.distanceKm} km</strong> • {selectedStation.drivingMinutes} min en auto
                 </span>
-              )}
+              </div>
             </div>
-            <div className="flex items-center space-x-2 mt-0.5">
-              {selectedStation.isOpen24h && (
-                <span className="text-[10px] bg-emerald-100 text-emerald-900 font-semibold px-2 py-0.5 rounded-full">
-                  Abierto 24h
+
+            {/* Real-time Rate Indicator + Expand/Collapse Button */}
+            <div className="flex items-center gap-2 shrink-0">
+              <div className="text-right">
+                <div className="text-[10px] text-slate-500 uppercase tracking-wider font-medium">
+                  Tarifa kWh
+                </div>
+                <div className="text-base sm:text-lg text-slate-900 font-extrabold font-mono">
+                  ${selectedStation.ratePerKwh.toLocaleString()}{' '}
+                  <span className="text-xs font-normal text-slate-500">COP</span>
+                </div>
+              </div>
+
+              {/* Tappable Chevron to Expand / Collapse */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleSheetState();
+                }}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center transition-all active:scale-95 ml-1"
+                type="button"
+                title={sheetState === 'expanded' ? 'Minimizar' : 'Subir barra de información'}
+              >
+                <span className="material-symbols-outlined text-[20px] transition-transform duration-200">
+                  {sheetState === 'expanded' ? 'expand_more' : 'expand_less'}
                 </span>
-              )}
-              <span className="text-xs text-slate-500 flex items-center font-medium">
-                <span className="material-symbols-outlined text-xs mr-0.5 text-emerald-600">
-                  near_me
-                </span>
-                <strong className="text-slate-800 font-mono mr-1">{selectedStation.distanceKm} km</strong> • {selectedStation.drivingMinutes} min en auto
-              </span>
+              </button>
             </div>
           </div>
 
-          {/* Real-time Rate Indicator */}
-          <div className="text-right">
-            <div className="text-[10px] text-slate-500 uppercase tracking-wider font-medium">
-              Tarifa kWh
+          {/* Hint when collapsed */}
+          {sheetState === 'collapsed' && (
+            <div className="flex items-center justify-center gap-1.5 mt-1 text-[11px] text-emerald-700 font-semibold animate-pulse">
+              <span>Toca o desliza hacia arriba para ver conectores y reservar</span>
+              <span className="material-symbols-outlined text-[16px]">keyboard_arrow_up</span>
             </div>
-            <div className="text-base sm:text-lg text-slate-900 font-extrabold font-mono">
-              ${selectedStation.ratePerKwh.toLocaleString()}{' '}
-              <span className="text-xs font-normal text-slate-500">COP</span>
-            </div>
-          </div>
+          )}
         </div>
 
-        {/* Connector Availability Matrix */}
-        <div className="mt-2.5 space-y-1.5">
-          <div className="text-[11px] font-semibold text-slate-600 flex justify-between items-center">
-            <span>PUESTOS DE CARGA DISPONIBLES</span>
-            <span className="text-emerald-700 font-bold">
-              {selectedStation.availableCount} de {selectedStation.totalCount} libres
-            </span>
-          </div>
+        {/* Scrollable Body Content (Visible in 'half' and 'expanded') */}
+        {sheetState !== 'collapsed' && (
+          <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-3.5 no-scrollbar">
+            {/* Connector Availability Matrix */}
+            <div className="space-y-1.5">
+              <div className="text-[11px] font-semibold text-slate-600 flex justify-between items-center">
+                <span>PUESTOS DE CARGA DISPONIBLES</span>
+                <span className="text-emerald-700 font-bold">
+                  {selectedStation.availableCount} de {selectedStation.totalCount} libres
+                </span>
+              </div>
 
-          <div className="grid grid-cols-3 gap-2">
-            {selectedStation.connectors.slice(0, 3).map((conn) => {
-              const isSelected = selectedConnector?.id === conn.id;
-              const isOccupied = conn.status === 'occupied';
+              <div className="grid grid-cols-3 gap-2">
+                {selectedStation.connectors.slice(0, 3).map((conn) => {
+                  const isSelected = selectedConnector?.id === conn.id;
+                  const isOccupied = conn.status === 'occupied';
 
-              if (isOccupied) {
-                return (
-                  <div
-                    key={conn.id}
-                    className="bg-slate-50 border border-slate-200/60 rounded-lg p-2 flex flex-col justify-between opacity-75 select-none"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] text-slate-500">{conn.name}</span>
-                      <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-                    </div>
-                    <div className="mt-1">
-                      <div className="text-[11px] font-semibold text-slate-500 line-through">
-                        {conn.power}
+                  if (isOccupied) {
+                    return (
+                      <div
+                        key={conn.id}
+                        className="bg-slate-50 border border-slate-200/60 rounded-lg p-2 flex flex-col justify-between opacity-75 select-none"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] text-slate-500 font-medium">{conn.name}</span>
+                          <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                        </div>
+                        <div className="mt-1">
+                          <div className="text-[11px] font-semibold text-slate-500 line-through">
+                            {conn.power}
+                          </div>
+                          <div className="text-[9px] text-slate-500 leading-tight">
+                            {conn.statusLabel}
+                          </div>
+                        </div>
                       </div>
-                      <div className="text-[9px] text-slate-500 leading-tight">
-                        {conn.statusLabel}
-                      </div>
-                    </div>
-                  </div>
-                );
-              }
+                    );
+                  }
 
-              return (
-                <div
-                  key={conn.id}
-                  onClick={() => setSelectedConnector(conn)}
-                  className={`rounded-lg p-2 flex flex-col justify-between cursor-pointer transition-all ${
-                    isSelected
-                      ? 'bg-emerald-500/10 border-2 border-emerald-500 shadow-2xs'
-                      : 'bg-white border border-slate-200 hover:border-emerald-400'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span
-                      className={`text-[10px] font-bold ${
-                        isSelected ? 'text-emerald-900' : 'text-slate-800'
+                  return (
+                    <div
+                      key={conn.id}
+                      onClick={() => setSelectedConnector(conn)}
+                      className={`rounded-lg p-2 flex flex-col justify-between cursor-pointer transition-all ${
+                        isSelected
+                          ? 'bg-emerald-500/10 border-2 border-emerald-500 shadow-2xs'
+                          : 'bg-white border border-slate-200 hover:border-emerald-400'
                       }`}
                     >
-                      {conn.name}
-                    </span>
-                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                      <div className="flex items-center justify-between">
+                        <span
+                          className={`text-[10px] font-bold ${
+                            isSelected ? 'text-emerald-900' : 'text-slate-800'
+                          }`}
+                        >
+                          {conn.name}
+                        </span>
+                        <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                      </div>
+                      <div className="mt-1">
+                        <div className="text-[11px] font-extrabold text-slate-900">{conn.power}</div>
+                        <div className="text-[10px] text-emerald-700 font-semibold">Disponible</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Amenities Badges Ribbon */}
+            <div className="flex items-center space-x-2 overflow-x-auto no-scrollbar py-0.5">
+              {selectedStation.amenities.map((amenity, idx) => (
+                <div
+                  key={idx}
+                  className="flex items-center shrink-0 bg-slate-100 px-2 py-0.5 rounded text-[11px] text-slate-600 font-medium"
+                >
+                  <span className="material-symbols-outlined text-xs mr-1 text-slate-500">
+                    {amenity.includes('Caf')
+                      ? 'local_cafe'
+                      : amenity.includes('Baño')
+                      ? 'wc'
+                      : amenity.includes('Segur')
+                      ? 'security'
+                      : 'wifi'}
+                  </span>
+                  {amenity}
+                </div>
+              ))}
+            </div>
+
+            {/* Dual Action Buttons */}
+            <div className="grid grid-cols-4 gap-2 pt-1">
+              <button
+                onClick={handleToggleNavigation}
+                className={`col-span-1 h-12 border rounded-xl flex flex-col items-center justify-center active:scale-95 transition-all ${
+                  isNavigating
+                    ? 'bg-emerald-50 border-emerald-500 text-emerald-700'
+                    : 'bg-white border-slate-200 hover:bg-slate-50 text-slate-800 shadow-xs'
+                }`}
+                type="button"
+              >
+                <span className="material-symbols-outlined text-emerald-600 text-[20px]">
+                  {isNavigating ? 'close' : 'directions'}
+                </span>
+                <span className="text-[10px] font-semibold">{isNavigating ? 'Cancelar' : 'Ruta'}</span>
+              </button>
+
+              <button
+                onClick={() => onStartReservation(selectedStation, selectedConnector)}
+                className="col-span-3 h-12 bg-emerald-500 hover:bg-emerald-600 active:scale-[0.98] text-white rounded-xl font-bold text-sm flex items-center justify-center space-x-2 shadow-sm transition-all"
+                type="button"
+              >
+                <span className="material-symbols-outlined material-symbols-fill text-lg">electric_bolt</span>
+                <span>
+                  Reservar Conector{' '}
+                  {selectedConnector?.type.includes('CCS2')
+                    ? 'CCS2'
+                    : selectedConnector?.name || 'CCS2'}
+                </span>
+              </button>
+            </div>
+
+            {/* Hint to pull up more when in 'half' mode */}
+            {sheetState === 'half' && (
+              <button
+                onClick={() => setSheetState('expanded')}
+                className="w-full py-1.5 flex items-center justify-center gap-1 text-[11px] text-slate-400 hover:text-emerald-700 font-medium transition-colors"
+                type="button"
+              >
+                <span>Desliza o toca para ver ubicación exacta y horarios</span>
+                <span className="material-symbols-outlined text-[16px]">keyboard_arrow_up</span>
+              </button>
+            )}
+
+            {/* Expanded Detailed Section (Only visible when fully expanded) */}
+            {sheetState === 'expanded' && (
+              <div className="space-y-3.5 pt-2 border-t border-slate-100 animate-in fade-in duration-200">
+                {/* Mall exact location & parking info */}
+                <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3 space-y-2">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
+                    <span className="material-symbols-outlined text-emerald-600 text-base">local_parking</span>
+                    Ubicación y Acceso en {selectedStation.name}
                   </div>
-                  <div className="mt-1">
-                    <div className="text-[11px] font-extrabold text-slate-900">{conn.power}</div>
-                    <div className="text-[10px] text-emerald-700 font-semibold">Disponible</div>
+                  <p className="text-[11px] text-slate-600 leading-relaxed">
+                    {selectedStation.address}. Estacionamiento en <strong>Sótano 2</strong>, bahías de recarga verde <strong>E-01 a E-04</strong>, contiguo a los ascensores de la torre comercial.
+                  </p>
+                  <div className="flex flex-wrap items-center gap-3 pt-1.5 text-[10px] text-slate-500 border-t border-slate-200/60">
+                    <span className="flex items-center gap-1">
+                      <span className="material-symbols-outlined text-xs text-emerald-600">schedule</span>
+                      Abierto: {selectedStation.isOpen24h ? '24 Horas' : '6:00 AM - 11:00 PM'}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <span className="material-symbols-outlined text-xs text-emerald-600">security</span>
+                      Vigilancia privada y cámaras 24/7
+                    </span>
                   </div>
                 </div>
-              );
-            })}
+
+                {/* Technical Specifications */}
+                <div className="space-y-1.5">
+                  <div className="text-[11px] font-bold text-slate-700 uppercase tracking-wider flex justify-between">
+                    <span>Especificaciones técnicas</span>
+                    <span className="text-emerald-700 font-mono font-bold">Máx {selectedStation.maxPowerKw} kW</span>
+                  </div>
+                  <div className="space-y-2">
+                    {selectedStation.connectors.map((c) => (
+                      <div
+                        key={c.id}
+                        onClick={() => setSelectedConnector(c)}
+                        className={`p-2.5 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
+                          selectedConnector?.id === c.id
+                            ? 'border-emerald-500 bg-emerald-50/50 ring-2 ring-emerald-500/20'
+                            : 'border-slate-200 bg-white hover:border-slate-300'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <div
+                            className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs ${
+                              selectedConnector?.id === c.id
+                                ? 'bg-emerald-500 text-white'
+                                : 'bg-slate-100 text-slate-700'
+                            }`}
+                          >
+                            <span className="material-symbols-outlined text-[18px]">ev_charger</span>
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs font-bold text-slate-900">
+                                {c.name} ({c.type})
+                              </span>
+                              <span
+                                className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold ${
+                                  c.status === 'available'
+                                    ? 'bg-emerald-100 text-emerald-800'
+                                    : 'bg-amber-100 text-amber-800'
+                                }`}
+                              >
+                                {c.statusLabel}
+                              </span>
+                            </div>
+                            <div className="text-[10px] text-slate-500 mt-0.5 font-medium">
+                              Bahía: {c.bay} • Potencia: {c.power} ({c.kw} kW)
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-xs font-mono font-bold text-slate-800">
+                            ${selectedStation.ratePerKwh.toLocaleString()}
+                          </span>
+                          <span className="block text-[9px] text-slate-400">COP/kWh</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Policies & Pricing */}
+                <div className="bg-emerald-50/70 border border-emerald-200/80 rounded-xl p-3 space-y-1.5">
+                  <div className="text-xs font-bold text-emerald-950 flex items-center gap-1">
+                    <span className="material-symbols-outlined text-[16px] text-emerald-700">payments</span>
+                    Transparencia Tarifaria ExceCharge
+                  </div>
+                  <ul className="text-[10px] text-emerald-900 space-y-1 list-disc list-inside">
+                    <li>Cobro únicamente por energía real transferida (${selectedStation.ratePerKwh.toLocaleString()} COP/kWh).</li>
+                    <li>15 minutos de cortesía tras completar la carga para retirar el vehículo.</li>
+                    <li>Tarifa de sobrestadía de $300 COP/min tras el periodo de gracia.</li>
+                  </ul>
+                </div>
+
+                {/* Quick Switch to Other Shopping Centers in Medellín */}
+                <div className="space-y-2 pt-1">
+                  <div className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
+                    Otros Centros Comerciales en Medellín
+                  </div>
+                  <div className="space-y-1.5">
+                    {filteredStations
+                      .filter((st) => st.id !== selectedStation.id)
+                      .slice(0, 4)
+                      .map((otherStation) => (
+                        <div
+                          key={otherStation.id}
+                          onClick={() => {
+                            handleFocusStation(otherStation);
+                            setSheetState('half');
+                          }}
+                          className="p-2.5 rounded-xl border border-slate-200 hover:border-emerald-400 bg-white flex items-center justify-between cursor-pointer transition-all active:scale-[0.99]"
+                        >
+                          <div className="flex items-center gap-2">
+                            <div className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600">
+                              <span className="material-symbols-outlined text-sm">storefront</span>
+                            </div>
+                            <div>
+                              <h4 className="text-xs font-bold text-slate-800 leading-tight">
+                                {otherStation.name}
+                              </h4>
+                              <p className="text-[10px] text-slate-500">
+                                {otherStation.distanceKm} km • {otherStation.availableCount}/{otherStation.totalCount} libres
+                              </p>
+                            </div>
+                          </div>
+                          <span className="text-[11px] font-bold text-emerald-700 flex items-center">
+                            Ver
+                            <span className="material-symbols-outlined text-sm">chevron_right</span>
+                          </span>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+
+                {/* Minimize back to map button */}
+                <button
+                  onClick={() => setSheetState('half')}
+                  className="w-full py-2.5 text-center text-xs font-bold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors mt-2"
+                  type="button"
+                >
+                  Minimizar a vista de mapa
+                </button>
+              </div>
+            )}
           </div>
-        </div>
-
-        {/* Amenities Badges Ribbon */}
-        <div className="flex items-center space-x-2 mt-2.5 overflow-x-auto no-scrollbar">
-          {selectedStation.amenities.map((amenity, idx) => (
-            <div
-              key={idx}
-              className="flex items-center shrink-0 bg-slate-100 px-2 py-0.5 rounded text-[11px] text-slate-600 font-medium"
-            >
-              <span className="material-symbols-outlined text-xs mr-1">
-                {amenity.includes('Caf')
-                  ? 'local_cafe'
-                  : amenity.includes('Baño')
-                  ? 'wc'
-                  : amenity.includes('Segur')
-                  ? 'security'
-                  : 'wifi'}
-              </span>
-              {amenity}
-            </div>
-          ))}
-        </div>
-
-        {/* Dual Action Buttons */}
-        <div className="grid grid-cols-4 gap-2 mt-3">
-          <button
-            onClick={handleToggleNavigation}
-            className={`col-span-1 h-12 border rounded-lg flex flex-col items-center justify-center active:scale-95 transition-all ${
-              isNavigating
-                ? 'bg-emerald-50 border-emerald-500 text-emerald-700'
-                : 'bg-white border-slate-200 hover:bg-slate-50 text-slate-800'
-            }`}
-            type="button"
-          >
-            <span className="material-symbols-outlined text-emerald-600 text-[20px]">
-              {isNavigating ? 'close' : 'directions'}
-            </span>
-            <span className="text-[10px] font-semibold">{isNavigating ? 'Cancelar' : 'Ruta'}</span>
-          </button>
-
-          <button
-            onClick={() => onStartReservation(selectedStation, selectedConnector)}
-            className="col-span-3 h-12 bg-emerald-500 hover:bg-emerald-600 active:scale-[0.98] text-white rounded-lg font-bold text-sm flex items-center justify-center space-x-2 shadow-sm transition-all"
-            type="button"
-          >
-            <span className="material-symbols-outlined material-symbols-fill">electric_bolt</span>
-            <span>
-              Reservar Conector{' '}
-              {selectedConnector?.type.includes('CCS2')
-                ? 'CCS2'
-                : selectedConnector?.name || 'CCS2'}
-            </span>
-          </button>
-        </div>
+        )}
       </div>
     </div>
   );
