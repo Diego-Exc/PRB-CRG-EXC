@@ -1,0 +1,6 @@
+{
+  "name": "Voltío - Movilidad Eléctrica Colombia",
+  "description": "ExceCharge: La app de Excelec para encontrar, reservar y gestionar puntos de carga de vehículos eléctricos en Medellín y Colombia.",
+  "requestFramePermissions": ["geolocation", "notifications"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
